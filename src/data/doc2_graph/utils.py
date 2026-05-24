@@ -1,6 +1,9 @@
 from argparse import ArgumentParser
 import os
-from attrdict import AttrDict
+try:
+    from addict import Dict as AttrDict
+except ImportError:
+    from attrdict import AttrDict
 import yaml
 
 from .paths import *
