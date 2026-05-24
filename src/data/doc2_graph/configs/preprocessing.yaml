@@ -1,0 +1,26 @@
+FEATURES:
+  add_embs: true
+  add_eweights: true
+  add_fudge: false
+  add_geom: true
+  add_hist: false
+  add_visual: false
+  num_polar_bins: 8
+GRAPHS:
+  data_type: img
+  edge_type: knn
+  node_granularity: gt
+ADAPTIVE:
+  candidate_pool_size: 15
+  adaptive_k: 10
+  score_threshold: 0.0
+  weights:
+    distance: 1.0
+    row_align: 0.6
+    col_align: 0.6
+    direction: 0.4
+    overlap: 0.3
+    text_sim: 0.0
+  enabled_signals: [distance, row_align, col_align, direction, overlap, text_sim]
+LOADER:
+  src_data: FUNSD

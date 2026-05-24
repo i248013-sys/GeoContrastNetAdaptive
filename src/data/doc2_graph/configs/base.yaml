@@ -1,0 +1,27 @@
+# THIS YAML SETTING IS USED AS A BASE TO PRODUCE THE 'PREPROCESSING.YAML' ONE.
+# THIS IT IS MEANT TO BE USED AS A STARTING POINT AND DOCUMENTATION ONE (see all the different choises a user has).
+
+LOADER:
+  src_data:
+    - FUNSD
+    # - PAU
+    # - CUSTOM
+FEATURES:
+  add_embs: true
+  add_eweights: true
+  add_fudge: false
+  add_geom: true
+  add_hist: false
+  add_visual: true
+GRAPHS:
+  edge_type:
+    - fully
+    # - knn
+  data_type:
+    - img
+    # - pdf
+  node_granularity:
+    - gt
+    # - ocr
+    # - yolo  
+  
