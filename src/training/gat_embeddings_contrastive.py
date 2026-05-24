@@ -18,13 +18,14 @@ from ..data.Dataset import (FUNSD_loader,
                             edgesAggregation_kmeans_graphs)
 
 
-from .utils import (get_model, 
+from .utils import (get_model,
                     compute_crossentropy_loss,
                     get_activation,
                     get_optimizer,
                     get_scheduler,
-                    weighted_edges, 
+                    weighted_edges,
                     region_encoding)
+from . import mlflow_logger as mlf
 
 from ..evaluation import (SVM_classifier, 
                           kmeans_classifier, 
@@ -634,9 +635,19 @@ def contrastiv_node_edge_training(config):
     validation_graphs, _ = dgl.load_graphs((HERE / config['validation_graphs']).__str__())
     test_graphs, _       = dgl.load_graphs((HERE / config['test_graphs']).__str__())
     
-    dataset_train = Unet_Dataset(train_graphs, (HERE /config['train_img'].__str__()))
-    dataset_val   = Unet_Dataset(validation_graphs, (HERE /config['val_img'].__str__()))
-    dataset_test = Unet_Dataset(test_graphs, (HERE /config['test_img']).__str__())
+    if config.get('train_img') is not None:
+        dataset_train = Unet_Dataset(train_graphs, (HERE /config['train_img'].__str__()))
+        dataset_val   = Unet_Dataset(validation_graphs, (HERE /config['val_img'].__str__()))
+        dataset_test  = Unet_Dataset(test_graphs, (HERE /config['test_img']).__str__())
+    else:
+        # Model does not use images; pair each graph with a None placeholder.
+        class _GraphOnly:
+            def __init__(self, graphs): self.graphs = graphs
+            def __len__(self): return len(self.graphs)
+            def __getitem__(self, i): return self.graphs[i], None
+        dataset_train = _GraphOnly(train_graphs)
+        dataset_val   = _GraphOnly(validation_graphs)
+        dataset_test  = _GraphOnly(test_graphs)
 #
     train_loader        = torch.utils.data.DataLoader(dataset_train, batch_size=config['batch_size'], collate_fn = collate, shuffle=True)
     validation_loader   = torch.utils.data.DataLoader(dataset_val, batch_size=config['batch_size'],  collate_fn = collate, shuffle=False)
@@ -673,6 +684,29 @@ def contrastiv_node_edge_training(config):
                 print("Epoch {:05d} | TrainLoss {:.4f} | TrainF1-MACRO-node {:.4f} | Val-f1-key-val {:.4f} | ValLoss {:.4f} | ValF1-MACRO-node {:.4f} | ValAUC-PR-node {:.4f} |"
                         .format(epoch, train_loss.item(), macro_f1, classes_f1[1], val_tot_loss.item(), val_macro, val_auc))
 
+                mlf.log_epoch(
+                    epoch,
+                    train_loss=train_loss.item(),
+                    train_f1_macro_node=macro_f1,
+                    train_auc_node=auc,
+                    train_acc_node=accuracy_train,
+                    val_loss=val_tot_loss.item(),
+                    val_f1_macro_node=val_macro,
+                    val_f1_micro_node=micro_f1_nodes,
+                    val_auc_node=val_auc,
+                    val_precision_node=precision,
+                    val_acc_node=accuracy_val,
+                    val_f1_macro_edge=macro_f1_edges,
+                    val_f1_micro_edge=f1_micro_edges,
+                    val_auc_edge=auc_edges,
+                    val_precision_edge=precision_edges,
+                    val_acc_edge=accuracy_edges,
+                    val_f1_no_link=classes_f1[0],
+                    val_f1_key_value=classes_f1[1],
+                    best_val_f1_key_value=best_val_f1_micro_key_value,
+                    lr=optimizer.param_groups[0]['lr'],
+                )
+
             total_train_loss /= config['epochs']; total_validation_loss /= config['epochs']
             print("Train Loss: {:.4f} | Validation Loss: {:.4f}".format(total_train_loss, total_validation_loss), end='')
         else:
@@ -689,6 +723,25 @@ def contrastiv_node_edge_training(config):
     test_loss = test_edges_nodes(best_model, test_loader, config)
 
     print(" | Test Loss: {:.4f}".format(test_loss))
+
+    try:
+        loss_value = test_loss.item() if hasattr(test_loss, 'item') else float(test_loss)
+    except Exception:
+        loss_value = None
+    nodes_json = config['output_dir'] / 'metrics_nodes.json'
+    edges_json = config['output_dir'] / 'metrics_edges_doc2graph.json'
+    test_metrics = {'loss': loss_value} if loss_value is not None else {}
+    if nodes_json.exists():
+        with open(nodes_json) as f:
+            test_metrics.update({f"node_{k.replace(' ', '_')}": v
+                                 for k, v in json.load(f).items()})
+    if edges_json.exists():
+        with open(edges_json) as f:
+            for k, v in json.load(f).items():
+                if isinstance(v, list):
+                    continue
+                test_metrics[f"edge_{k}"] = v
+    mlf.log_test(**test_metrics)
     return best_model
 
 
